@@ -1,5 +1,6 @@
 use engram::types::enums::*;
 use engram::types::edge::Edge;
+use engram::types::memory_node::MemoryNode;
 use uuid::Uuid;
 
 #[test]
@@ -84,4 +85,68 @@ fn test_inhibitory_edge() {
     let target = Uuid::new_v4();
     let edge = Edge::new(target, RelationType::Semantic, -0.5);
     assert!(edge.is_inhibitory());
+}
+
+#[test]
+fn test_memory_node_creation() {
+    let node = MemoryNode::new(
+        "test content".to_string(),
+        vec![0.1, 0.2, 0.3],
+        ContentType::Text,
+    );
+    assert_eq!(node.content, "test content");
+    assert_eq!(node.content_type, ContentType::Text);
+    assert_eq!(node.abstraction_level, AbstractionLevel::Raw);
+    assert_eq!(node.access_count, 0);
+    assert!(node.edges.is_empty());
+}
+
+#[test]
+fn test_memory_node_add_edge() {
+    let mut node = MemoryNode::new(
+        "source".to_string(),
+        vec![0.1],
+        ContentType::Text,
+    );
+    let target_id = Uuid::new_v4();
+    node.add_edge(target_id, RelationType::Semantic, 0.9);
+    assert_eq!(node.edges.len(), 1);
+    assert_eq!(node.edges[0].target_id, target_id);
+}
+
+#[test]
+fn test_memory_node_record_access() {
+    let mut node = MemoryNode::new(
+        "test".to_string(),
+        vec![0.1],
+        ContentType::Fact,
+    );
+    assert_eq!(node.access_count, 0);
+    node.record_access();
+    assert_eq!(node.access_count, 1);
+    node.record_access();
+    assert_eq!(node.access_count, 2);
+}
+
+#[test]
+fn test_memory_node_salience_default() {
+    let node = MemoryNode::new(
+        "test".to_string(),
+        vec![0.1],
+        ContentType::Text,
+    );
+    assert!((node.salience - 0.5).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_memory_node_serialization() {
+    let node = MemoryNode::new(
+        "test content".to_string(),
+        vec![0.1, 0.2],
+        ContentType::Event,
+    );
+    let json = serde_json::to_string(&node).unwrap();
+    let deserialized: MemoryNode = serde_json::from_str(&json).unwrap();
+    assert_eq!(node.id, deserialized.id);
+    assert_eq!(node.content, deserialized.content);
 }
