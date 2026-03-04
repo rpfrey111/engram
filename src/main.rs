@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
 use engram::async_engine::{AsyncEngram, AsyncEngineConfig};
+use engram::provider::cloudflare::{CloudflareEmbedder, CloudflareLLM};
+use engram::provider::embedder::Embedder;
+use engram::provider::llm::LLMProvider;
 use engram::provider::ollama::{OllamaEmbedder, OllamaLLM};
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -9,6 +12,10 @@ use std::path::PathBuf;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    /// Provider backend: ollama or cloudflare
+    #[arg(long, default_value = "ollama", global = true)]
+    provider: String,
 
     /// Ollama server URL
     #[arg(long, default_value = "http://localhost:11434", global = true)]
@@ -55,8 +62,30 @@ async fn main() {
         ..Default::default()
     };
 
-    let embedder = Box::new(OllamaEmbedder::new(&cli.ollama_url, &cli.embed_model));
-    let llm = Box::new(OllamaLLM::new(&cli.ollama_url, &cli.llm_model));
+    let (embedder, llm): (Box<dyn Embedder>, Box<dyn LLMProvider>) = match cli.provider.as_str() {
+        "cloudflare" => {
+            let account_id = std::env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_else(|_| {
+                eprintln!("Error: CLOUDFLARE_ACCOUNT_ID env var required for cloudflare provider");
+                std::process::exit(1);
+            });
+            let api_token = std::env::var("CLOUDFLARE_API_TOKEN").unwrap_or_else(|_| {
+                eprintln!("Error: CLOUDFLARE_API_TOKEN env var required for cloudflare provider");
+                std::process::exit(1);
+            });
+            (
+                Box::new(CloudflareEmbedder::new(&account_id, &api_token)),
+                Box::new(CloudflareLLM::new(&account_id, &api_token)),
+            )
+        }
+        "ollama" => (
+            Box::new(OllamaEmbedder::new(&cli.ollama_url, &cli.embed_model)),
+            Box::new(OllamaLLM::new(&cli.ollama_url, &cli.llm_model)),
+        ),
+        other => {
+            eprintln!("Unknown provider: {other}. Use 'ollama' or 'cloudflare'.");
+            std::process::exit(1);
+        }
+    };
 
     match cli.command {
         Commands::Chat => run_chat(config, embedder, llm).await,
@@ -67,8 +96,8 @@ async fn main() {
 
 async fn run_chat(
     config: AsyncEngineConfig,
-    embedder: Box<OllamaEmbedder>,
-    llm: Box<OllamaLLM>,
+    embedder: Box<dyn Embedder>,
+    llm: Box<dyn LLMProvider>,
 ) {
     let model_name = llm.model_name().to_string();
     let mut engine = AsyncEngram::load(config, embedder, llm).unwrap_or_else(|e| {
@@ -120,8 +149,8 @@ async fn run_chat(
 
 async fn run_ingest(
     config: AsyncEngineConfig,
-    embedder: Box<OllamaEmbedder>,
-    llm: Box<OllamaLLM>,
+    embedder: Box<dyn Embedder>,
+    llm: Box<dyn LLMProvider>,
     path: &std::path::Path,
 ) {
     let mut engine = AsyncEngram::load(config, embedder, llm).unwrap_or_else(|e| {
@@ -236,8 +265,8 @@ fn chunk_content(content: &str) -> Vec<String> {
 
 fn run_stats(
     config: AsyncEngineConfig,
-    embedder: Box<OllamaEmbedder>,
-    llm: Box<OllamaLLM>,
+    embedder: Box<dyn Embedder>,
+    llm: Box<dyn LLMProvider>,
 ) {
     let engine = AsyncEngram::load(config, embedder, llm).unwrap_or_else(|e| {
         eprintln!("Failed to load engine: {e}");

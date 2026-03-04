@@ -5,47 +5,64 @@ use super::embedder::{EmbedError, Embedder};
 use super::llm::{build_system_prompt, LLMError, LLMProvider};
 use crate::compiler::context::LLMContext;
 
-pub struct OllamaEmbedder {
-    base_url: String,
+// --- CloudflareEmbedder ---
+
+pub struct CloudflareEmbedder {
+    account_id: String,
+    api_token: String,
     model: String,
     client: reqwest::Client,
     dimensions: usize,
 }
 
-impl OllamaEmbedder {
-    pub fn new(base_url: &str, model: &str) -> Self {
+impl CloudflareEmbedder {
+    pub fn new(account_id: &str, api_token: &str) -> Self {
         Self {
-            base_url: base_url.trim_end_matches('/').to_string(),
-            model: model.to_string(),
+            account_id: account_id.to_string(),
+            api_token: api_token.to_string(),
+            model: "@cf/baai/bge-base-en-v1.5".to_string(),
             client: reqwest::Client::new(),
             dimensions: 768,
         }
     }
+
+    pub fn with_model(mut self, model: &str, dimensions: usize) -> Self {
+        self.model = model.to_string();
+        self.dimensions = dimensions;
+        self
+    }
 }
 
 #[derive(Serialize)]
-struct EmbedRequest {
-    model: String,
-    input: String,
+struct CfEmbedRequest {
+    text: String,
 }
 
 #[derive(Deserialize)]
-struct EmbedResponse {
-    embeddings: Vec<Vec<f32>>,
+struct CfEmbedResult {
+    data: Vec<Vec<f32>>,
+}
+
+#[derive(Deserialize)]
+struct CfEmbedResponse {
+    result: CfEmbedResult,
 }
 
 #[async_trait]
-impl Embedder for OllamaEmbedder {
+impl Embedder for CloudflareEmbedder {
     async fn embed(&self, text: &str) -> Result<Vec<f32>, EmbedError> {
-        let url = format!("{}/api/embed", self.base_url);
-        let req = EmbedRequest {
-            model: self.model.clone(),
-            input: text.to_string(),
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/ai/run/{}",
+            self.account_id, self.model
+        );
+        let req = CfEmbedRequest {
+            text: text.to_string(),
         };
 
         let resp = self
             .client
             .post(&url)
+            .bearer_auth(&self.api_token)
             .json(&req)
             .send()
             .await
@@ -57,15 +74,16 @@ impl Embedder for OllamaEmbedder {
             return Err(EmbedError::RequestFailed(format!("{status}: {body}")));
         }
 
-        let body: EmbedResponse = resp
+        let body: CfEmbedResponse = resp
             .json()
             .await
             .map_err(|e| EmbedError::InvalidResponse(e.to_string()))?;
 
-        body.embeddings
+        body.result
+            .data
             .into_iter()
             .next()
-            .ok_or_else(|| EmbedError::InvalidResponse("empty embeddings array".to_string()))
+            .ok_or_else(|| EmbedError::InvalidResponse("empty embeddings result".to_string()))
     }
 
     fn dimensions(&self) -> usize {
@@ -73,80 +91,83 @@ impl Embedder for OllamaEmbedder {
     }
 }
 
-// --- OllamaLLM ---
+// --- CloudflareLLM ---
 
-pub struct OllamaLLM {
-    base_url: String,
+pub struct CloudflareLLM {
+    account_id: String,
+    api_token: String,
     model: String,
     client: reqwest::Client,
 }
 
-impl OllamaLLM {
-    pub fn new(base_url: &str, model: &str) -> Self {
+impl CloudflareLLM {
+    pub fn new(account_id: &str, api_token: &str) -> Self {
         Self {
-            base_url: base_url.trim_end_matches('/').to_string(),
-            model: model.to_string(),
+            account_id: account_id.to_string(),
+            api_token: api_token.to_string(),
+            model: "@cf/meta/llama-3.1-8b-instruct".to_string(),
             client: reqwest::Client::new(),
         }
     }
 
-    pub fn model_name(&self) -> &str {
-        &self.model
+    pub fn with_model(mut self, model: &str) -> Self {
+        self.model = model.to_string();
+        self
     }
 }
 
 #[derive(Serialize)]
-struct ChatMessage {
+struct CfChatMessage {
     role: String,
     content: String,
 }
 
 #[derive(Serialize)]
-struct ChatRequest {
-    model: String,
-    messages: Vec<ChatMessage>,
-    stream: bool,
+struct CfChatRequest {
+    messages: Vec<CfChatMessage>,
 }
 
 #[derive(Deserialize)]
-struct ChatResponseMessage {
-    content: String,
+struct CfChatResult {
+    response: String,
 }
 
 #[derive(Deserialize)]
-struct ChatResponse {
-    message: ChatResponseMessage,
+struct CfChatResponse {
+    result: CfChatResult,
 }
 
 #[async_trait]
-impl LLMProvider for OllamaLLM {
+impl LLMProvider for CloudflareLLM {
     async fn generate(
         &self,
         system: &str,
         user_message: &str,
         context: &LLMContext,
     ) -> Result<String, LLMError> {
-        let url = format!("{}/api/chat", self.base_url);
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/ai/run/{}",
+            self.account_id, self.model
+        );
         let system_prompt = build_system_prompt(system, context);
 
-        let req = ChatRequest {
-            model: self.model.clone(),
+        let req = CfChatRequest {
             messages: vec![
-                ChatMessage {
+                CfChatMessage {
                     role: "system".to_string(),
                     content: system_prompt,
                 },
-                ChatMessage {
+                CfChatMessage {
                     role: "user".to_string(),
                     content: user_message.to_string(),
                 },
             ],
-            stream: false,
         };
 
         let resp = self
             .client
             .post(&url)
+            .bearer_auth(&self.api_token)
             .json(&req)
             .send()
             .await
@@ -158,12 +179,12 @@ impl LLMProvider for OllamaLLM {
             return Err(LLMError::RequestFailed(format!("{status}: {body}")));
         }
 
-        let body: ChatResponse = resp
+        let body: CfChatResponse = resp
             .json()
             .await
             .map_err(|e| LLMError::InvalidResponse(e.to_string()))?;
 
-        Ok(body.message.content)
+        Ok(body.result.response)
     }
 
     fn model_name(&self) -> &str {
