@@ -1,0 +1,77 @@
+use engram::types::enums::*;
+use engram::types::memory_node::MemoryNode;
+use engram::index::graph::GraphStore;
+
+#[test]
+fn test_graph_insert_and_get() {
+    let mut graph = GraphStore::new();
+    let node = MemoryNode::new("hello".to_string(), vec![0.1, 0.2], ContentType::Text);
+    let id = node.id;
+    graph.insert(node);
+    let retrieved = graph.get(&id).unwrap();
+    assert_eq!(retrieved.content, "hello");
+}
+
+#[test]
+fn test_graph_get_nonexistent() {
+    let graph = GraphStore::new();
+    let id = uuid::Uuid::new_v4();
+    assert!(graph.get(&id).is_none());
+}
+
+#[test]
+fn test_graph_add_edge_between_nodes() {
+    let mut graph = GraphStore::new();
+    let node_a = MemoryNode::new("A".to_string(), vec![0.1], ContentType::Text);
+    let node_b = MemoryNode::new("B".to_string(), vec![0.2], ContentType::Text);
+    let id_a = node_a.id;
+    let id_b = node_b.id;
+    graph.insert(node_a);
+    graph.insert(node_b);
+
+    graph.add_edge(id_a, id_b, RelationType::Semantic, 0.8);
+
+    let a = graph.get(&id_a).unwrap();
+    assert_eq!(a.edges.len(), 1);
+    assert_eq!(a.edges[0].target_id, id_b);
+}
+
+#[test]
+fn test_graph_neighbors() {
+    let mut graph = GraphStore::new();
+    let node_a = MemoryNode::new("A".to_string(), vec![0.1], ContentType::Text);
+    let node_b = MemoryNode::new("B".to_string(), vec![0.2], ContentType::Text);
+    let node_c = MemoryNode::new("C".to_string(), vec![0.3], ContentType::Text);
+    let id_a = node_a.id;
+    let id_b = node_b.id;
+    let id_c = node_c.id;
+    graph.insert(node_a);
+    graph.insert(node_b);
+    graph.insert(node_c);
+
+    graph.add_edge(id_a, id_b, RelationType::Semantic, 0.9);
+    graph.add_edge(id_a, id_c, RelationType::Temporal, 0.5);
+
+    let neighbors = graph.neighbors(&id_a);
+    assert_eq!(neighbors.len(), 2);
+}
+
+#[test]
+fn test_graph_remove_node() {
+    let mut graph = GraphStore::new();
+    let node = MemoryNode::new("remove me".to_string(), vec![0.1], ContentType::Text);
+    let id = node.id;
+    graph.insert(node);
+    assert!(graph.get(&id).is_some());
+    graph.remove(&id);
+    assert!(graph.get(&id).is_none());
+}
+
+#[test]
+fn test_graph_node_count() {
+    let mut graph = GraphStore::new();
+    assert_eq!(graph.len(), 0);
+    graph.insert(MemoryNode::new("A".to_string(), vec![0.1], ContentType::Text));
+    graph.insert(MemoryNode::new("B".to_string(), vec![0.2], ContentType::Text));
+    assert_eq!(graph.len(), 2);
+}
