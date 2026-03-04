@@ -1,1 +1,1 @@
-// Core types for the Engram neuromorphic memory system
+pub mod enums;
