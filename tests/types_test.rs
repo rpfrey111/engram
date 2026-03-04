@@ -1,4 +1,6 @@
 use engram::types::enums::*;
+use engram::types::edge::Edge;
+use uuid::Uuid;
 
 #[test]
 fn test_content_type_serialization() {
@@ -36,4 +38,50 @@ fn test_retrieval_intent_variants() {
         RetrievalIntent::Verify,
     ];
     assert_eq!(intents.len(), 4);
+}
+
+#[test]
+fn test_edge_creation() {
+    let target = Uuid::new_v4();
+    let edge = Edge::new(target, RelationType::Semantic, 0.8);
+    assert_eq!(edge.target_id, target);
+    assert_eq!(edge.relation_type, RelationType::Semantic);
+    assert!((edge.weight - 0.8).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_edge_weight_clamped() {
+    let target = Uuid::new_v4();
+    let edge = Edge::new(target, RelationType::Causal, 1.5);
+    assert!(edge.weight <= 1.0);
+
+    let edge2 = Edge::new(target, RelationType::Causal, -0.5);
+    assert!(edge2.weight >= -1.0);
+}
+
+#[test]
+fn test_edge_strengthen() {
+    let target = Uuid::new_v4();
+    let mut edge = Edge::new(target, RelationType::Semantic, 0.5);
+    edge.strengthen(0.1);
+    assert!((edge.weight - 0.6).abs() < f32::EPSILON);
+
+    // Should not exceed 1.0
+    edge.strengthen(0.9);
+    assert!((edge.weight - 1.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_edge_weaken() {
+    let target = Uuid::new_v4();
+    let mut edge = Edge::new(target, RelationType::Temporal, 0.5);
+    edge.weaken(0.2);
+    assert!((edge.weight - 0.3).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_inhibitory_edge() {
+    let target = Uuid::new_v4();
+    let edge = Edge::new(target, RelationType::Semantic, -0.5);
+    assert!(edge.is_inhibitory());
 }
