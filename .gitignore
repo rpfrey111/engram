@@ -3,3 +3,8 @@ Cargo.lock
 *.swp
 *.swo
 .DS_Store
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/

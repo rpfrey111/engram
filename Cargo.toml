@@ -13,5 +13,8 @@ chrono = { version = "0.4", features = ["serde"] }
 ordered-float = { version = "4", features = ["serde"] }
 thiserror = "2"
 
+[workspace]
+members = [".", "python"]
+
 [dev-dependencies]
 approx = "0.5"
