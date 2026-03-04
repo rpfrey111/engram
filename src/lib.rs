@@ -6,3 +6,4 @@ pub mod router;
 pub mod compiler;
 pub mod engine;
 pub mod consolidation;
+pub mod provider;
