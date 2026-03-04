@@ -5,3 +5,4 @@ pub mod memory;
 pub mod router;
 pub mod compiler;
 pub mod engine;
+pub mod consolidation;
