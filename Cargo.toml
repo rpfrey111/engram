@@ -18,6 +18,10 @@ async-trait = "0.1"
 clap = { version = "4", features = ["derive"] }
 dirs = "6"
 
+[[bin]]
+name = "engram"
+path = "src/main.rs"
+
 [workspace]
 members = [".", "python"]
 

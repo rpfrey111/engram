@@ -8,3 +8,4 @@ pub mod engine;
 pub mod consolidation;
 pub mod provider;
 pub mod sensory;
+pub mod async_engine;
