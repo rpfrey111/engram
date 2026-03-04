@@ -3,13 +3,28 @@ use uuid::Uuid;
 use super::graph::GraphStore;
 
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
+    if a.is_empty() || b.is_empty() {
         return 0.0;
     }
 
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let mag_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let mag_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    // Support different-length vectors by zero-padding the shorter one.
+    // This is correct for bag-of-words where new dimensions are implicitly zero.
+    let len = a.len().max(b.len());
+    let get_a = |i: usize| if i < a.len() { a[i] } else { 0.0 };
+    let get_b = |i: usize| if i < b.len() { b[i] } else { 0.0 };
+
+    let mut dot = 0.0f32;
+    let mut mag_a = 0.0f32;
+    let mut mag_b = 0.0f32;
+    for i in 0..len {
+        let ai = get_a(i);
+        let bi = get_b(i);
+        dot += ai * bi;
+        mag_a += ai * ai;
+        mag_b += bi * bi;
+    }
+    mag_a = mag_a.sqrt();
+    mag_b = mag_b.sqrt();
 
     if mag_a == 0.0 || mag_b == 0.0 {
         return 0.0;
