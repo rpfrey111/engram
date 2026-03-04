@@ -1,6 +1,8 @@
 use engram::types::enums::*;
 use engram::types::edge::Edge;
 use engram::types::memory_node::MemoryNode;
+use engram::types::cue::RetrievalCue;
+use engram::types::constellation::MemoryConstellation;
 use uuid::Uuid;
 
 #[test]
@@ -149,4 +151,42 @@ fn test_memory_node_serialization() {
     let deserialized: MemoryNode = serde_json::from_str(&json).unwrap();
     assert_eq!(node.id, deserialized.id);
     assert_eq!(node.content, deserialized.content);
+}
+
+#[test]
+fn test_retrieval_cue_creation() {
+    let cue = RetrievalCue::new(
+        vec![0.1, 0.2, 0.3],
+        RetrievalIntent::Recall,
+    );
+    assert_eq!(cue.intent, RetrievalIntent::Recall);
+    assert!(cue.entities.is_empty());
+    assert!((cue.salience_floor - 0.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_retrieval_cue_builder() {
+    let cue = RetrievalCue::new(vec![0.1], RetrievalIntent::Explore)
+        .with_entities(vec!["Acme Corp".to_string()])
+        .with_salience_floor(0.3);
+    assert_eq!(cue.entities.len(), 1);
+    assert!((cue.salience_floor - 0.3).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_constellation_empty() {
+    let constellation = MemoryConstellation::empty();
+    assert!(constellation.focal_nodes.is_empty());
+    assert!(constellation.context_nodes.is_empty());
+    assert!((constellation.confidence - 0.0).abs() < f32::EPSILON);
+    assert!((constellation.coverage - 0.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_constellation_with_focal_node() {
+    let node = MemoryNode::new("test".to_string(), vec![0.1], ContentType::Fact);
+    let mut constellation = MemoryConstellation::empty();
+    constellation.add_focal(node, 0.9);
+    assert_eq!(constellation.focal_nodes.len(), 1);
+    assert!((constellation.focal_nodes[0].activation - 0.9).abs() < f32::EPSILON);
 }
