@@ -3,3 +3,4 @@ pub mod index;
 pub mod retrieval;
 pub mod memory;
 pub mod router;
+pub mod compiler;
