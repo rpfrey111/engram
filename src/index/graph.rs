@@ -1,10 +1,14 @@
 use std::collections::HashMap;
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::types::edge::Edge;
 use crate::types::enums::RelationType;
 use crate::types::memory_node::MemoryNode;
 
+#[derive(Serialize, Deserialize)]
 pub struct GraphStore {
     nodes: HashMap<Uuid, MemoryNode>,
 }
@@ -66,5 +70,21 @@ impl GraphStore {
 
     pub fn all_nodes(&self) -> impl Iterator<Item = &MemoryNode> {
         self.nodes.values()
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), std::io::Error> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        std::fs::write(path, json)
+    }
+
+    pub fn load(path: &Path) -> Result<Self, std::io::Error> {
+        if !path.exists() {
+            return Ok(Self::new());
+        }
+        let json = std::fs::read_to_string(path)?;
+        let store: Self = serde_json::from_str(&json)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        Ok(store)
     }
 }
